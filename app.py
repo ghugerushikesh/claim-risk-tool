@@ -2,103 +2,148 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import PyPDF2
+from sklearn.ensemble import RandomForestClassifier
 
-st.set_page_config(page_title="Claim Risk Tool", layout="wide")
+st.set_page_config(page_title="Smart Claim Analyzer", layout="wide")
 
-st.title("🛡️ Claim Risk Scoring Dashboard")
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("🛠️ Smart Claim Tool")
+page = st.sidebar.radio("Navigation", ["Dashboard", "Upload Data", "PDF Reader"])
 
-# 📤 CSV Upload
-uploaded_file = st.file_uploader("📤 Upload Claim CSV File", type=["csv"])
+st.title("🛡️ Smart Claim Analyzer")
+st.markdown("### AI-powered Claim Risk & Fraud Detection System")
+st.divider()
 
-# 📄 PDF Upload
-pdf_file = st.file_uploader("📄 Upload Claim PDF", type=["pdf"])
+# ---------------- UPLOAD DATA ----------------
+if page == "Upload Data":
+    st.header("📤 Upload Claim Data")
 
-# ---------------- PDF SECTION ----------------
-if pdf_file:
-    reader = PyPDF2.PdfReader(pdf_file)
-    text = ""
+    uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
-    for page in reader.pages:
-        text += page.extract_text()
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
 
-    st.subheader("📄 Extracted Text from PDF")
-    st.write(text)
+        st.subheader("📊 Raw Data")
+        st.dataframe(df)
 
-# ---------------- CSV SECTION ----------------
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+        # ---------------- RISK LOGIC ----------------
+        def calculate_risk(row):
+            score = 0
 
-    st.subheader("📊 Raw Data")
-    st.dataframe(df)
+            if row["Amount"] > 200000:
+                score += 2
+            if row["Previous_Claims"] >= 2:
+                score += 1
+            if row["Hospital"] == "B":
+                score += 1
 
-    # 🧠 Smart Risk Scoring (Improved Logic)
-    def calculate_risk(row):
-        score = 0
+            if score >= 3:
+                return "High Risk"
+            elif score == 2:
+                return "Medium Risk"
+            else:
+                return "Low Risk"
 
-        if row["Amount"] > 200000:
-            score += 2
-        if row["Previous_Claims"] >= 2:
-            score += 1
-        if row["Hospital"] == "B":
-            score += 1
+        df["Risk"] = df.apply(calculate_risk, axis=1)
 
-        if score >= 3:
-            return "High Risk"
-        elif score == 2:
-            return "Medium Risk"
-        else:
-            return "Low Risk"
+        # ---------------- DECISION ----------------
+        def decision(risk):
+            if risk == "High Risk":
+                return "Manual Review"
+            else:
+                return "Auto Approve"
 
-    df["Risk"] = df.apply(calculate_risk, axis=1)
+        df["Decision"] = df["Risk"].apply(decision)
 
-    # 🧠 Decision Logic
-    def decision(risk):
-        if risk == "High Risk":
-            return "Manual Review"
-        else:
-            return "Auto Approve"
+        # ---------------- ML MODEL ----------------
+        df["Risk_Label"] = df["Risk"].map({
+            "Low Risk": 0,
+            "Medium Risk": 1,
+            "High Risk": 2
+        })
 
-    df["Decision"] = df["Risk"].apply(decision)
+        X = df[["Amount", "Previous_Claims"]]
+        y = df["Risk_Label"]
 
-    # ✅ Processed Data
-    st.subheader("✅ Processed Data")
-    st.dataframe(df)
+        model = RandomForestClassifier()
+        model.fit(X, y)
 
-    # 📌 Summary
-    st.subheader("📌 Summary")
+        df["Predicted_Risk"] = model.predict(X)
 
-    col1, col2, col3 = st.columns(3)
+        risk_map = {0: "Low Risk", 1: "Medium Risk", 2: "High Risk"}
+        df["Predicted_Risk"] = df["Predicted_Risk"].map(risk_map)
 
-    col1.metric("Total Claims", len(df))
-    col2.metric("High Risk", (df["Risk"] == "High Risk").sum())
-    col3.metric("Auto Approvals", (df["Decision"] == "Auto Approve").sum())
+        st.success("✅ Data processed successfully!")
 
-    # 📈 Bar Chart
-    st.subheader("📈 Risk Distribution (Bar Chart)")
-    risk_counts = df["Risk"].value_counts()
-    st.bar_chart(risk_counts)
+        # Save in session for dashboard
+        st.session_state["data"] = df
 
-    # 🥧 Pie Chart
-    st.subheader("🥧 Risk Share (Pie Chart)")
-    fig, ax = plt.subplots()
-    risk_counts.plot.pie(autopct="%1.1f%%", ax=ax)
-    ax.set_ylabel("")  # remove label
-    st.pyplot(fig)
+# ---------------- DASHBOARD ----------------
+elif page == "Dashboard":
+    st.header("📊 Dashboard")
 
-    # 🔍 Filter
-    st.subheader("🔍 Filter Data")
-
-    risk_filter = st.selectbox(
-        "Select Risk Level",
-        ["All", "Low Risk", "Medium Risk", "High Risk"]
-    )
-
-    if risk_filter != "All":
-        filtered_df = df[df["Risk"] == risk_filter]
+    if "data" not in st.session_state:
+        st.warning("⚠️ Please upload data first")
     else:
-        filtered_df = df
+        df = st.session_state["data"]
 
-    st.dataframe(filtered_df)
+        st.subheader("📌 Summary")
 
-else:
-    st.info("Please upload a CSV file to proceed.")
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("Total Claims", len(df))
+        col2.metric("High Risk", (df["Risk"] == "High Risk").sum())
+        col3.metric("Auto Approvals", (df["Decision"] == "Auto Approve").sum())
+
+        # Alerts
+        if (df["Risk"] == "High Risk").sum() > 0:
+            st.error("⚠️ High Risk Claims Detected!")
+        else:
+            st.success("✅ All claims look safe")
+
+        # Charts
+        st.subheader("📈 Risk Distribution")
+
+        risk_counts = df["Risk"].value_counts()
+        st.bar_chart(risk_counts)
+
+        # Pie Chart
+        st.subheader("🥧 Risk Share")
+
+        fig, ax = plt.subplots()
+        risk_counts.plot.pie(autopct="%1.1f%%", ax=ax)
+        ax.set_ylabel("")
+        st.pyplot(fig)
+
+        # Filter
+        st.subheader("🔍 Filter Data")
+
+        risk_filter = st.selectbox(
+            "Select Risk Level",
+            ["All", "Low Risk", "Medium Risk", "High Risk"]
+        )
+
+        if risk_filter != "All":
+            filtered_df = df[df["Risk"] == risk_filter]
+        else:
+            filtered_df = df
+
+        st.dataframe(filtered_df)
+
+# ---------------- PDF READER ----------------
+elif page == "PDF Reader":
+    st.header("📄 Claim PDF Reader")
+
+    pdf_file = st.file_uploader("Upload PDF File", type=["pdf"])
+
+    if pdf_file:
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+
+        for page in reader.pages:
+            text += page.extract_text()
+
+        st.subheader("📄 Extracted Text")
+        st.write(text)
+
+        st.info("👉 You can later extract amount, hospital, etc. from this text")
