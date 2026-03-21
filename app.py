@@ -4,85 +4,50 @@ import matplotlib.pyplot as plt
 import PyPDF2
 from sklearn.ensemble import RandomForestClassifier
 
-# --- PAGE CONFIG ---
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Smart Claim Analyzer", page_icon="🛡️", layout="wide")
 
-# --- CUSTOM CSS ---
+# ---------------- LOGIN SYSTEM ----------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.title("🔐 Smart Claim Analyzer Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if username == "admin" and password == "admin123":
+            st.session_state.logged_in = True
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+
+    st.stop()
+
+# ---------------- CUSTOM CSS ----------------
 st.markdown("""
 <style>
-    /* Main background and text colors for dark theme */
-    .stApp {
-        background-color: #0E1117;
-        color: #FFFFFF;
-    }
-    
-    /* Metrics cards */
-    div[data-testid="metric-container"] {
-        background-color: #1E232F;
-        border-radius: 12px;
-        padding: 20px;
-        border: 1px solid #2D3748;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    }
-    div[data-testid="metric-container"]:hover {
-        border-color: #4A5568;
-    }
-    
-    /* Headers */
-    h1, h2, h3 {
-        font-family: 'Inter', sans-serif;
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #12151E;
-        border-right: 1px solid #1E232F;
-    }
-    
-    /* File Uploader */
-    [data-testid="stFileUploadDropzone"] {
-        background-color: #1E232F;
-        border: 2px dashed #4A5568;
-        border-radius: 12px;
-        padding: 30px;
-    }
-    
-    /* Dataframes */
-    [data-testid="stDataFrame"] {
-        border-radius: 10px;
-        overflow: hidden;
-        border: 1px solid #2D3748;
-    }
-    
-    /* Success/Warning/Error alerts */
-    .stAlert {
-        border-radius: 10px;
-        border: none;
-    }
-    
-    /* Hide the default radio buttons to make them look cleaner */
-    div.row-widget.stRadio > div {
-        background-color: transparent;
-        padding: 0;
-    }
+.stApp { background-color: #0E1117; color: white; }
+[data-testid="stSidebar"] { background-color: #12151E; }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.markdown("## 🛠️ Smart Claim Tool")
-    st.markdown("---")
-    page = st.radio("Navigation", ["Dashboard", "Upload Data", "PDF Reader"], label_visibility="collapsed")
-    st.markdown("---")
-    st.caption("© 2024 Smart Claim Analyzer")
-    st.caption("V 2.0 - Premium Edition")
+    st.title("🛠️ Smart Claim Tool")
+    page = st.radio("Navigation", ["Dashboard", "Upload Data", "PDF Reader"])
 
-# ---------------- MAIN HEADER ----------------
-st.title("🛡️ Smart Claim Analyzer")
-st.markdown("<p style='font-size: 1.2rem; color: #A0AEC0;'>AI-powered Claim Risk & Fraud Detection System</p>", unsafe_allow_html=True)
+# ---------------- HEADER ----------------
+st.markdown("""
+<h1 style='text-align:center;'>🛡️ Smart Claim Analyzer</h1>
+<p style='text-align:center;color:gray;'>AI-powered Claim Risk & Fraud Detection</p>
+""", unsafe_allow_html=True)
+
 st.divider()
 
-# ---------------- PROCESSING LOGIC (Helper Functions) ----------------
+# ---------------- FUNCTIONS ----------------
 def calculate_risk(row):
     score = 0
     if row.get("Amount", 0) > 200000:
@@ -102,169 +67,106 @@ def calculate_risk(row):
 def decision(risk):
     return "Manual Review" if risk == "High Risk" else "Auto Approve"
 
-# ---------------- UPLOAD DATA ----------------
+# ---------------- UPLOAD ----------------
 if page == "Upload Data":
-    st.header("📤 Processing Center")
-    st.markdown("Upload your claims dataset below to perform AI risk analysis and detect potential fraud anomalies.")
-    
-    uploaded_file = st.file_uploader("Drop your CSV file here", type=["csv"], help="Limit 200MB per file")
-    
-    if uploaded_file:
-        with st.spinner("Analyzing claims data using Advanced AI..."):
-            df = pd.read_csv(uploaded_file)
-            
-            # Apply Risk Logic
-            if not df.empty:
-                df["Risk"] = df.apply(calculate_risk, axis=1)
-                df["Decision"] = df["Risk"].apply(decision)
-                
-                # ML Model Simulation
-                if "Amount" in df.columns and "Previous_Claims" in df.columns:
-                    df["Risk_Label"] = df["Risk"].map({"Low Risk": 0, "Medium Risk": 1, "High Risk": 2})
-                    X = df[["Amount", "Previous_Claims"]]
-                    y = df["Risk_Label"]
-                    
-                    model = RandomForestClassifier(random_state=42)
-                    model.fit(X, y)
-                    df["Predicted_Risk"] = model.predict(X)
-                    df["Predicted_Risk"] = df["Predicted_Risk"].map({0: "Low Risk", 1: "Medium Risk", 2: "High Risk"})
-                
-                st.session_state["data"] = df
-                
-                st.success("✅ Data processed successfully! 100% records analyzed.")
-                
-                with st.expander("🔍 View Processed Data", expanded=True):
-                    st.dataframe(df, use_container_width=True)
-                
-                st.info("💡 Head over to the **Dashboard** to view interactive insights.")
-            else:
-                st.error("Uploaded CSV is empty. Please upload a valid file.")
+    st.header("📤 Upload Claim Data")
+
+    file = st.file_uploader("Upload CSV", type=["csv"])
+
+    if file:
+        df = pd.read_csv(file)
+
+        if not df.empty:
+            df["Risk"] = df.apply(calculate_risk, axis=1)
+            df["Decision"] = df["Risk"].apply(decision)
+
+            # ML MODEL
+            if all(col in df.columns for col in ["Amount", "Previous_Claims"]):
+                df["Risk_Label"] = df["Risk"].map({
+                    "Low Risk": 0,
+                    "Medium Risk": 1,
+                    "High Risk": 2
+                })
+
+                X = df[["Amount", "Previous_Claims"]]
+                y = df["Risk_Label"]
+
+                model = RandomForestClassifier()
+                model.fit(X, y)
+
+                df["Predicted_Risk"] = model.predict(X)
+
+                mapping = {0: "Low Risk", 1: "Medium Risk", 2: "High Risk"}
+                df["Predicted_Risk"] = df["Predicted_Risk"].map(mapping)
+
+            st.session_state["data"] = df
+
+            st.success("Data processed successfully")
+            st.dataframe(df, use_container_width=True)
 
 # ---------------- DASHBOARD ----------------
 elif page == "Dashboard":
-    st.header("📈 Analytics Dashboard")
-    
+    st.header("📊 Dashboard")
+
     if "data" not in st.session_state:
-        st.info("👋 Welcome! Please go to **Upload Data** to import your claims dataset first.")
-        st.markdown("""
-        <div style='text-align: center; padding: 50px; background-color: #1E232F; border-radius: 12px; margin-top: 20px; border: 1px dashed #4A5568;'>
-            <h3 style='color: #A0AEC0;'>No Data Available</h3>
-            <p style='color: #718096;'>Upload a CSV file to unlock powerful insights and visualizations.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.warning("Upload data first")
     else:
         df = st.session_state["data"]
-        
-        # Top Metrics Row
-        col1, col2, col3, col4 = st.columns(4)
-        
-        total_claims = len(df)
-        high_risk = (df["Risk"] == "High Risk").sum()
-        auto_approved = (df["Decision"] == "Auto Approve").sum()
-        total_amount = df["Amount"].sum() if "Amount" in df.columns else 0
-        
-        with col1:
-            st.metric("Total Claims Processed", f"{total_claims:,}")
-        with col2:
-            st.metric("High Risk Detected", f"{high_risk:,}", delta=f"{(high_risk/max(total_claims,1))*100:.1f}%", delta_color="inverse")
-        with col3:
-            st.metric("Auto Approvals", f"{auto_approved:,}", delta=f"{(auto_approved/max(total_claims,1))*100:.1f}%", delta_color="normal")
-        with col4:
-            st.metric("Total Claim Amount", f"${total_amount:,.2f}" if total_amount > 0 else "N/A")
-            
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Alerts
-        if high_risk > 0:
-            st.error(f"🚨 Immediate Action Required: **{high_risk}** High Risk Claims pending manual review!")
-        else:
-            st.success("✅ All systems nominal. No high-risk claims detected.")
-            
-        st.markdown("<br>", unsafe_allow_html=True)
-            
-        # Charts Section
-        st.markdown("### 📊 Distribution Insights")
-        tab1, tab2 = st.tabs(["Risk Breakdown", "Data Explorer"])
-        
-        with tab1:
-            chart_col1, chart_col2 = st.columns(2)
-            
-            with chart_col1:
-                st.markdown("#### Risk Level Distribution")
-                risk_counts = df["Risk"].value_counts()
-                st.bar_chart(risk_counts, color="#FF4B4B")
-                
-            with chart_col2:
-                st.markdown("#### Risk Share Proportion")
-                fig, ax = plt.subplots(figsize=(6, 4))
-                fig.patch.set_facecolor('#0E1117')
-                ax.set_facecolor('#0E1117')
-                
-                idx = risk_counts.index
-                c_map = {"Low Risk": "#00C853", "Medium Risk": "#FFD600", "High Risk": "#FF1744"}
-                pie_colors = [c_map.get(x, '#888888') for x in idx]
-                
-                wedges, texts, autotexts = ax.pie(
-                    risk_counts, 
-                    labels=risk_counts.index, 
-                    autopct="%1.1f%%",
-                    colors=pie_colors,
-                    textprops={'color': "white", 'fontsize': 10},
-                    startangle=90,
-                    explode=[0.05]*len(risk_counts)
-                )
-                
-                for autotext in autotexts:
-                    autotext.set_color('black')
-                    autotext.set_weight('bold')
-                    
-                ax.axis('equal')
-                st.pyplot(fig)
-                
-        with tab2:
-            st.markdown("#### 🔍 Filter & Explore")
-            
-            filter_col1, filter_col2 = st.columns([1, 3])
-            with filter_col1:
-                risk_filter = st.selectbox("Select Risk Level", ["All", "Low Risk", "Medium Risk", "High Risk"])
-            
-            filtered_df = df if risk_filter == "All" else df[df["Risk"] == risk_filter]
-            st.dataframe(filtered_df, use_container_width=True)
 
-# ---------------- PDF READER ----------------
+        col1, col2, col3 = st.columns(3)
+
+        total = len(df)
+        high = (df["Risk"] == "High Risk").sum()
+        auto = (df["Decision"] == "Auto Approve").sum()
+
+        col1.metric("Total Claims", total)
+        col2.metric("High Risk", high)
+        col3.metric("Auto Approvals", auto)
+
+        # Business Value
+        fraud_loss = high * 50000
+        st.metric("Potential Fraud Exposure", f"₹{fraud_loss:,.0f}")
+
+        if high > 0:
+            st.error("High Risk Claims Detected")
+        else:
+            st.success("All claims safe")
+
+        # Charts
+        risk_counts = df["Risk"].value_counts()
+
+        st.subheader("Bar Chart")
+        st.bar_chart(risk_counts)
+
+        st.subheader("Pie Chart")
+        fig, ax = plt.subplots()
+        risk_counts.plot.pie(autopct="%1.1f%%", ax=ax)
+        ax.set_ylabel("")
+        st.pyplot(fig)
+
+        # Filter
+        risk_filter = st.selectbox("Filter Risk", ["All", "Low Risk", "Medium Risk", "High Risk"])
+
+        if risk_filter != "All":
+            df = df[df["Risk"] == risk_filter]
+
+        st.dataframe(df, use_container_width=True)
+
+# ---------------- PDF ----------------
 elif page == "PDF Reader":
-    st.header("📄 Intelligent PDF Claims Reader")
-    st.markdown("Upload scanned claim documents or PDF invoices to extract raw text for NLP analysis.")
-    
-    pdf_file = st.file_uploader("Drop PDF Document", type=["pdf"], help="Supports multi-page PDFs")
-    
-    if pdf_file:
-        with st.spinner("Extracting text contents..."):
-            reader = PyPDF2.PdfReader(pdf_file)
-            text = ""
-            
-            progress_bar = st.progress(0)
-            total_pages = len(reader.pages)
-            
-            for i, page_obj in enumerate(reader.pages):
-                extracted = page_obj.extract_text()
-                if extracted:
-                    text += extracted + "\n\n"
-                progress_bar.progress((i + 1) / total_pages)
-                
-            st.success(f"✅ Successfully extracted text from {total_pages} pages!")
-            
-            with st.expander("👁️ View Extracted Text", expanded=True):
-                st.text_area("Document Context", text, height=400)
-                
-            col1, col2 = st.columns(2)
-            with col1:
-                st.info("🧠 **Next Steps**: Feed this text into an LLM to extract **Amount**, **Hospital Name**, and **Patient Details** automatically.", icon="ℹ️")
-            with col2:
-                st.download_button(
-                    label="📥 Download Extracted Text",
-                    data=text,
-                    file_name="extracted_claim.txt",
-                    mime="text/plain",
-                    use_container_width=True
-                )
+    st.header("📄 PDF Reader")
+
+    pdf = st.file_uploader("Upload PDF", type=["pdf"])
+
+    if pdf:
+        reader = PyPDF2.PdfReader(pdf)
+        text = ""
+
+        for page in reader.pages:
+            content = page.extract_text()
+            if content:
+                text += content
+
+        st.text_area("Extracted Text", text, height=300)
+
+        st.download_button("Download Text", text, file_name="output.txt")
